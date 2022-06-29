@@ -1,0 +1,549 @@
+---
+title: "WQD7004 Group Assignment - Group 3"
+output: html_document
+date: '2022-06-16'
+---
+
+**Group Members**
+
+-   **Tan Yuan Lii (S2024825)** **Group Leader**
+-   Wong Ann Li (S2148268)
+-   Hoo Chun Teik (S2113651)
+-   Lee Ziteng Nicholas (S2132376)
+-   Noel Ng Fong Nian (S2142165)
+
+# **Income & Occupation Prediction** {.tabset}
+
+## Introduction {.tabset}
+
+-   The quality of life and economic condition of an individual are mostly determined by their income.
+-   However, it is difficult to identify the influential factors on income status.
+-   Fortunately, adult census data has been collected by US census bureau database where the enormous data could be utilized to generate the overview.
+
+### Dataset
+
+The source of [dataset](https://www.kaggle.com/datasets/uciml/adult-census-income) has been obtained via Kaggle. With 32561 Observations and 15 Variables.
+
+| No. | Variable Name  | Measurement | Description                                       | Example         |
+|-----------|-----------|-----------|----------------------------|-----------|
+| 1   | age            | Numerical   | Age of respondent                                 | 82              |
+| 2   | workclass      | Categorical | Occupation type of respondent                     | Private         |
+| 3   | fnlwgt         | Numerical   | Final weight                                      | 132870          |
+| 4   | education      | Categorical | Education status of respondent                    | HS-grad         |
+| 5   | education.num  | Numerical   | Education number that represents education status | 9               |
+| 6   | marital.status | Categorical | Marital status of respondent                      | Widowed         |
+| 7   | occupation     | Categorical | Respondent's occupation name                      | Exec-managerial |
+| 8   | relationship   | Categorical | Respondent's role in a relationship               | Not-in-family   |
+| 9   | race           | Categorical | Respondent's race                                 | White           |
+| 10  | sex            | Categorical | Respondent's sex                                  | Female          |
+| 11  | capital.gain   | Numerical   | Respondent's capital gain                         | 0               |
+| 12  | capital.loss   | Numerical   | Respondent's capital loss                         | 4356            |
+| 13  | hours.per.week | Numerical   | Respondent's working hour per week                | 18              |
+| 14  | native.country | Categorical | Respondent's native country                       | United-States   |
+| 15  | income         | Categorical | Respondent's salary                               | \<=50K          |
+
+### Objectives
+
+1.  Prepare and clean the provided population census data.
+2.  Conduct EDA on population census data.
+3.  Predict the income & occupation.
+4.  To analyze significant factors that affecting an individual income status & occupation.
+5.  Implement and compare several common machine learning classification techniques.
+
+## Packages Information
+
+```{r}
+# options(repos=structure(c(CRAN="http://cran.r-project.org")))
+# install.packages("dplyr")
+# install.packages("superml")
+# install.packages("naniar")
+# install.packages("caret")
+# install.packages("rpart")
+# install.packages("rpart.plot")
+# install.packages("Hmisc")
+# install.packages("reshape2")
+# install.packages('e1071')
+# install.packages("caTools") 
+# install.packages("ROCR") 
+
+library(caTools)
+library(caret)
+library(dplyr)
+library(e1071)
+library(Hmisc)
+library(reshape2)
+library(ggplot2)
+library(naniar)
+library(superml)
+library(rpart)
+library(rpart.plot)
+library(ROCR)
+library(tidyr)
+library(xgboost)
+```
+
+## Data {.tabset}
+
+### Data Preparation
+
+#### Importing Dataset
+
+```{r}
+df <- read.csv('adult.csv')
+df_ori <- read.csv('adult.csv')
+head(df)
+str(df)
+```
+
+#### Missing Values
+
+```{r}
+colSums(is.na(df))
+```
+
+#### Identifying Number of ? Values
+
+```{r}
+
+sum(df == "?")
+
+as.vector(unlist(count(df[df$age == "?",])))
+as.vector(unlist(count(df[df$workclass == "?",])))
+as.vector(unlist(count(df[df$fnlwgt == "?",])))
+as.vector(unlist(count(df[df$education == "?",])))
+as.vector(unlist(count(df[df$education.num == "?",])))
+as.vector(unlist(count(df[df$marital.status == "?",])))
+as.vector(unlist(count(df[df$occupation == "?",])))
+as.vector(unlist(count(df[df$relationship == "?",])))
+as.vector(unlist(count(df[df$race == "?",])))
+as.vector(unlist(count(df[df$sex == "?",])))
+as.vector(unlist(count(df[df$capital.gain == "?",])))
+as.vector(unlist(count(df[df$capital.loss == "?",])))
+as.vector(unlist(count(df[df$hours.per.week == "?",])))
+as.vector(unlist(count(df[df$native.country == "?",])))
+as.vector(unlist(count(df[df$income == "?",])))
+
+```
+
+#### Splitting Dataset to Numeric & Categorical Data
+
+```{r}
+column_num <- names(df[, sapply(df, is.numeric)])
+column_cat <- names(df[, sapply(df, is.character)])
+
+df_num <- df[ , column_num]
+
+df_cat <- df[ , column_cat]
+str(df_num)
+str(df_cat)
+```
+
+#### Summary of df_num & df_cat
+
+```{r}
+
+summary(df_num)
+Hmisc::describe(df_num)
+Hmisc::describe(df_cat)
+```
+
+### Exploratory Data Analysis
+
+#### Histogram was implemented to visualize the pattern and distribution of the numerical data.
+
+```{r}
+ggplot(gather(df_num), aes(value)) + 
+    geom_histogram(bins = 12) + 
+    facet_wrap(~key, scales = 'free')
+```
+
+From the histograms, we can see that "age", "fnlwgt", "capital.gain", "capital.loss" and "hours.per.week" are left skewed while "education.num" is right skewed.
+
+#### Correlation test was performed and plotted for numerical data
+
+```{r}
+# creating correlation matrix
+corr_mat <- round(cor(df_num),2)
+ 
+# reduce the size of correlation matrix
+melted_corr_mat <- melt(corr_mat)
+# head(melted_corr_mat)
+ 
+# plotting the correlation heatmap
+
+ggplot(data = melted_corr_mat, aes(x=Var1, y=Var2,
+                                   fill=value)) +
+geom_tile() +
+geom_text(aes(Var2, Var1, label = value),
+          color = "white", size = 4)
+```
+
+From the correlation plot, we can spot that correlation between all the numerical variable are not significant. "education.num" and "hours.per.week" has the highest correlation value of 0.15 followed by "education.num" and "capital.gain" with the correlation value of 0.12.
+
+#### Multiple variable count bar chart was implemented for categorical data to compare the dependent variable, "income" with all other variable.
+
+In the first chart which is "workclass" variable, we can observe that besides "Self-emp-inc", majority of the occupation type has more respondent with income that is lower than 50k.
+
+In the second chart, "education" variable count, we can spot that respondent with Doctorate, Prof-school and Master level of education have more higher income.
+
+Other than that, all the other variable count plot shows that all the respondents have lower income in every category.
+
+```{r}
+ggplot(df, aes(x = workclass, fill = income)) + geom_bar(position = "dodge") + coord_flip()
+ggplot(df, aes(x = education, fill = income)) + geom_bar(position = "dodge") + coord_flip()
+ggplot(df, aes(x = marital.status, fill = income)) + geom_bar(position = "dodge") + coord_flip()
+ggplot(df, aes(x = occupation, fill = income)) + geom_bar(position = "dodge") + coord_flip()
+ggplot(df, aes(x = relationship, fill = income)) + geom_bar(position = "dodge") + coord_flip()
+ggplot(df, aes(x = sex, fill = income)) + geom_bar(position = "dodge") + coord_flip()
+ggplot(df, aes(x = race, fill = income)) + geom_bar(position = "dodge") + coord_flip()
+ggplot(df, aes(x = native.country, fill = income)) + geom_bar(position = "dodge") + coord_flip() + theme(text = element_text(size = 9),element_line(size =1))
+```
+
+In the last plot which is "native,country" variable, we can notice that most of the respondent came from United States. Hence the dataset is describing population census in United States.
+
+### Data Pre-processing
+
+#### Replace "?" to NA
+
+```{r}
+df <- df %>% replace_with_na_all(condition = ~.x == "?")
+head(df)
+```
+
+#### Count Number of NA
+
+```{r}
+colSums(is.na(df))
+```
+
+#### Create Mode Function
+
+```{r}
+calc_mode <- function(x){
+  
+  # List the distinct / unique values
+  distinct_values <- unique(x)
+  
+  # Count the occurrence of each distinct value
+  distinct_tabulate <- tabulate(match(x, distinct_values))
+  
+  # Return the value with the highest occurrence
+  distinct_values[which.max(distinct_tabulate)]
+}
+```
+
+#### Fill NA with Mode
+
+```{r}
+df <- df %>% mutate(workclass = if_else(is.na(workclass), calc_mode(workclass), workclass))
+df <- df %>% mutate(occupation = if_else(is.na(occupation), calc_mode(occupation), occupation))
+df <- df %>% mutate(native.country = if_else(is.na(native.country), calc_mode(native.country), native.country))
+
+colSums(is.na(df))
+
+head(df)
+```
+
+#### Income replaced by 0 & 1
+
+```{r}
+df$income[df$income == "<=50K"] <- as.integer(0)
+df$income[df$income == ">50K"] <- as.integer(1)
+
+df$income = as.integer(df$income)
+
+str(df$income)
+```
+
+#### Encode Categorical Values to Numerical Values
+
+<!-- Reverse Encode: le$inverse_transform(df$workclass) -->
+
+```{r}
+
+le_workclass <- LabelEncoder$new()
+le_workclass$fit(df$workclass)
+df$workclass <- le_workclass$fit_transform(df$workclass)
+
+le_education <- LabelEncoder$new()
+le_education$fit(df$education)
+df$education <- le_education$fit_transform(df$education)
+
+le_marital.status <- LabelEncoder$new()
+le_marital.status$fit(df$marital.status)
+df$marital.status <- le_marital.status$fit_transform(df$marital.status)
+
+le_occupation <- LabelEncoder$new()
+le_occupation$fit(df$occupation)
+df$occupation <- le_occupation$fit_transform(df$occupation)
+
+le_relationship <- LabelEncoder$new()
+le_relationship$fit(df$relationship)
+df$relationship <- le_relationship$fit_transform(df$relationship)
+
+le_race <- LabelEncoder$new()
+le_race$fit(df$race)
+df$race <- le_race$fit_transform(df$race)
+
+le_sex <- LabelEncoder$new()
+le_sex$fit(df$sex)
+df$sex <- le_sex$fit_transform(df$sex)
+
+le_native.country <- LabelEncoder$new()
+le_native.country$fit(df$native.country)
+df$native.country <- le_native.country$fit_transform(df$native.country)
+
+head(df)
+```
+
+#### Shuffle Data
+
+```{r}
+set.seed(2132376)
+df <- df[sample(1:nrow(df)), ]
+head(df)
+```
+
+#### Remove education.num since redundant
+
+```{r}
+df <- subset(df, select = -education.num)
+head(df)
+```
+
+#### Split Data
+
+```{r}
+set.seed(2132376)
+#creating indices
+# 1 - 0.33 = 0.67
+trainIndex <- createDataPartition(df$income,p=0.67,list=FALSE)
+    
+#splitting data into training/testing data using the trainIndex object
+df_train <- df[trainIndex,] #training data (2/3 of data)
+df_test <- df[-trainIndex,] #testing data (1/3 of data)
+```
+
+## Modelling {.tabset}
+
+### Prediction of Income
+
+#### Decision Tree
+
+```{r}
+# Prediction of Income - Decision Tree
+
+incomeDT <- rpart(income ~ ., df_train, method = "class")
+
+# View Variable Importance
+incomeDT$variable.importance
+
+# Cross Validation Result
+printcp(incomeDT)
+plotcp(incomeDT)
+
+incomeDTBestCP = incomeDT$cptable[which.min(incomeDT$cptable[,"xerror"]), "CP"]
+incomeDT.pruned = prune(incomeDT, cp = incomeDTBestCP)
+
+rpart.plot(incomeDT.pruned)
+
+# Prediction and Confusion Matrix
+incomeDTPrediction <- predict(incomeDT.pruned, newdata = df_test ,type="class")
+confusionMatrix(as.factor(incomeDTPrediction), as.factor(df_test$income))
+
+```
+
+#### Support Vector Machine
+
+```{r}
+incomeSVM = svm(formula=income ~ ., data = df_train, type='C-classification', kernel='linear')
+
+incomeSVMPrediction = predict(incomeSVM, newdata=df_test)
+
+confusionMatrix(as.factor(incomeSVMPrediction), as.factor(df_test$income))
+```
+
+#### Logistic Regression
+
+```{r}
+incomeLR = glm(income ~ ., data = df_train, family="binomial")
+
+incomeLogisticPrediction = predict(incomeLR,df_test, type="response")
+incomeLogisticPrediction = ifelse(incomeLogisticPrediction > 0.5, 1, 0)
+
+confusionMatrix(as.factor(incomeLogisticPrediction), as.factor(df_test$income))
+
+# ROC-AUC Curve
+ROCPred <- prediction(incomeLogisticPrediction, df_test$income) 
+ROCPer <- performance(ROCPred, measure = "tpr", 
+                             x.measure = "fpr")
+   
+# Plotting curve
+auc <- performance(ROCPred, measure = "auc")
+auc <- auc@y.values[[1]]
+plot(ROCPer)
+plot(ROCPer, colorize = TRUE, 
+     print.cutoffs.at = seq(0.1, by = 0.1), 
+     main = "ROC CURVE")
+abline(a = 0, b = 1)
+auc <- round(auc, 4)
+legend(.6, .4, auc, title = "AUC", cex = 1)
+```
+
+#### XGBoost
+
+```{r}
+x_train = subset(df_train, select = -c(income))
+y_train = subset(df_train, select = c(income))
+x_test = subset(df_test, select = -c(income))
+y_test= subset(df_test, select = c(income))
+x_train = as.matrix(x_train)
+y_train = as.matrix(y_train)
+x_test = as.matrix(x_test)
+y_test = as.matrix(y_test)
+
+xgboost_train = xgb.DMatrix(data=x_train, label=y_train)
+xgboost_test = xgb.DMatrix(data=x_test, label=y_test)
+
+model <- xgboost(data = xgboost_train, 
+                 max_depth=3,
+                 eta=0.1,
+                 nrounds=100,
+                 booster="gbtree")
+                 # lambda=0.5,
+                 # alpha=0.5)
+
+summary(model)
+
+pred_test = predict(model, x_test)
+
+prediction = as.numeric(pred_test > 0.5)
+y_test = as.numeric(y_test)
+prediction = as.factor(prediction)
+y_test = as.factor(y_test)
+
+conf_mat = confusionMatrix(y_test, prediction)
+print(conf_mat)
+```
+
+### Prediction of Occupation
+
+#### Decision Tree
+
+```{r}
+# Prediction of Occupation - Decision Tree
+
+occupationDT <- rpart(occupation ~ ., df_train, method = "class")
+rpart.plot(occupationDT)
+
+# View Variable Importance
+occupationDT$variable.importance
+
+# Cross Validation Result
+printcp(occupationDT)
+plotcp(occupationDT)
+
+# Prediction and Confusion Matrix
+occupationDTPrediction <- predict(occupationDT, newdata = df_test ,type="class")
+confusionMatrix(as.factor(occupationDTPrediction), as.factor(df_test$occupation))
+```
+
+#### Support Vector Machine
+
+```{r}
+
+
+occupationSVM = svm(formula=occupation ~ ., data = df_train, type='C-classification', kernel='radial')
+
+occupationSVMPrediction = predict(occupationSVM, newdata=df_test)
+
+confusionMatrix(as.factor(occupationSVMPrediction), as.factor(df_test$occupation))
+```
+
+#### XGBoost
+
+```{r}
+
+X_train <- data.matrix(df_train[,-6])                  
+y_train <- as.factor(df_train$occupation)                   
+X_test <- data.matrix(df_test[,-6])                    
+y_test <- as.factor(df_test$occupation)
+
+sort(unique(y_test),decreasing=FALSE)
+
+# convert the train and test data into xgboost matrix type.
+xgboost_train = xgb.DMatrix(data=X_train, label=y_train)
+xgboost_test = xgb.DMatrix(data=X_test, label=y_test)
+
+# train a model using our training data
+model <- xgboost(data = xgboost_train,
+                 max.depth=5,
+                 nrounds=50, num_class = 15,
+                 objective = "multi:softmax")
+
+summary(model)
+
+# features importance 
+importance_matrix = xgb.importance(colnames(xgboost_train), model = model)
+
+importance_df = as.data.frame(importance_matrix)
+
+ggplot(importance_df, aes(x=reorder(Feature, -Gain), y=Gain, fill=Feature)) +
+  geom_bar(stat="identity")+theme_minimal()+
+  theme(legend.position="none")+ggtitle("Feature Importance")
+
+# use model to make predictions on test data
+pred_test = predict(model, xgboost_test)
+head(pred_test,10)
+
+# Convert predict result
+pred_y = as.factor((levels(y_test))[round(pred_test)])
+head(pred_y,10)
+
+print(pred_y)
+
+# Confusion Matrix
+conf_mat = confusionMatrix(y_test,pred_y)
+print(conf_mat)
+matrix1 = as.matrix(conf_mat)
+print(matrix1)
+```
+
+## Conclusion {.tabset}
+
+### Model Evaluation
+
+#### Income Prediction
+
+| Model                  | Accuracy |
+|------------------------|----------|
+| Decision Tree          | 0.8409   |
+| Support Vector Machine | 0.8119   |
+| XGBoost                | 0.8575   |
+| Logistic Regression    | 0.8182   |
+
+#### Occupation Prediction
+
+| Model                  | Accuracy |
+|------------------------|----------|
+| Decision Tree          | 0.2841   |
+| Support Vector Machine | 0.3050   |
+| XGBoost                | 0.3507   |
+
+For model evaluation, in comparison of the models' performance, we can conclude that XGBoost has the best performance for both income and occupation prediction. However, the prediction accuracy for all the models in predicting occupation is at max 0.3507 for XGBoost and lowest at 0.2841 for Decision Tree which is low. This might be resulted from the 14 categories of occupation class which is too wide to be considered as target variable. The solution to this problem will be to narrow down the target variable.
+
+### Feature Importance
+
+#### Income Prediction
+
+1.  Relationship
+
+#### Occupation Prediction
+
+1.  Education
+
+For feature importance in income prediction, it shows that "relationship" has the top priority in XGBoost model which is logical as individual living for themselves does have lesser responsibility and dedication in work in comparison with individual that commit for their loved ones and family, which in turn led to higher proportion of high income possess by married individuals.
+
+For feature importance in occupation prediction, it shows that "education" has the top priority in XGBoost model which makes sense because some jobs require a base level of knowledge and having an education is one way employers can judge your qualifications before hiring you.
+
+Future study may add more real-time data, run the model with different hyperparameter and implement random search for hyperparameter optimization. Interested party can adopt this research insight to identify the influential attribute causing the income inequality and may target the domain with strategy or policy to minimize the gap.
